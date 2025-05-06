@@ -134,11 +134,22 @@ async def handle_new_pr_opened(body: Dict[str, Any],
     if not (pull_request and api_url):
         get_logger().info(f"Invalid PR event: {action=} {api_url=}")
         return {}
+    
+    # For opened PRs, execute /describe and /review commands
+    apply_repo_settings(api_url)
+            
+    # Handle configured auto commands for PR events
     if action in get_settings().github_app.handle_pr_actions:  # ['opened', 'reopened', 'ready_for_review']
         # logic to ignore PRs with specific titles (e.g. "[Auto] ...")
-        apply_repo_settings(api_url)
         if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
             await _perform_auto_commands_github("pr_commands", agent, body, api_url, log_context)
+
+            get_logger().info(f"Automatically executing /describe and /review for newly opened PR {api_url=}")
+            get_settings().set("config.is_auto_command", True)
+            # Execute describe command
+            await agent.handle_request(api_url, "/describe")
+            # Execute review command
+            await agent.handle_request(api_url, "/review")
         else:
             get_logger().info(f"User {sender=} is not eligible to process PR {api_url=}")
 
@@ -309,6 +320,7 @@ async def handle_request(body: Dict[str, Any], event: str):
         body: The request body.
         event: The GitHub event type (e.g. "pull_request", "issue_comment", etc.).
     """
+
     action = body.get("action")  # "created", "opened", "reopened", "ready_for_review", "review_requested", "synchronize"
     get_logger().debug(f"Handling request with event: {event}, action: {action}")
     if not action:
