@@ -51,13 +51,24 @@ async def run_action():
         return
 
     # Set the environment variables in the settings
-    if OPENAI_KEY:
-        get_settings().set("OPENAI.KEY", OPENAI_KEY)
+    model_name = get_settings().config.get('model', '').lower()
+    is_openai_model = model_name.startswith('gpt') or 'openai' in model_name
+
+    if is_openai_model:
+        if OPENAI_KEY:
+            get_settings().set("OPENAI.KEY", OPENAI_KEY)
+        else:
+            print("OPENAI_KEY not set and OpenAI model is selected. Exiting.")
+            return
+        if OPENAI_ORG:
+            get_settings().set("OPENAI.ORG", OPENAI_ORG)
     else:
-        # Might not be set if the user is using models not from OpenAI
-        print("OPENAI_KEY not set")
-    if OPENAI_ORG:
-        get_settings().set("OPENAI.ORG", OPENAI_ORG)
+        # For non-OpenAI models (e.g., Bedrock, Anthropic, etc.), do not require AWS credentials here.
+        # Assume role-based authentication or other provider-specific auth is handled externally.
+        if OPENAI_KEY:
+            get_settings().set("OPENAI.KEY", OPENAI_KEY)  # Optional, in case some providers use it
+        if OPENAI_ORG:
+            get_settings().set("OPENAI.ORG", OPENAI_ORG)
     get_settings().set("GITHUB.USER_TOKEN", GITHUB_TOKEN)
     get_settings().set("GITHUB.DEPLOYMENT_TYPE", "user")
     enable_output = get_setting_or_env("GITHUB_ACTION_CONFIG.ENABLE_OUTPUT", True)
