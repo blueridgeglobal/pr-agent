@@ -52,7 +52,11 @@ async def run_action():
     print("model_name: ", model_name)
 
     # Only require OPENAI_KEY if the model is OpenAI
-    is_openai_model = model_name.startswith('gpt') or 'openai' in model_name
+    is_openai_model = (
+        model_name.startswith('gpt') or
+        model_name.startswith('openai') or
+        model_name in ['gpt-3.5-turbo', 'gpt-4', 'gpt-4o', 'gpt-4-turbo', 'gpt-4-32k']  # add any other OpenAI model names you use
+    )
     print("is_openai_model: ", is_openai_model)
 
     if is_openai_model:
