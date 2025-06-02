@@ -51,7 +51,9 @@ async def run_action():
     model_name = get_settings().config.get('model', '').lower()
     print("model_name: ", model_name)
 
+    # Only require OPENAI_KEY if the model is OpenAI
     is_openai_model = model_name.startswith('gpt') or 'openai' in model_name
+    print("is_openai_model: ", is_openai_model)
 
     if is_openai_model:
         OPENAI_KEY = os.environ.get('OPENAI_KEY')
