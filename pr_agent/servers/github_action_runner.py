@@ -144,6 +144,10 @@ async def run_action():
                         )
                     else:
                         await PRAgent().handle_request(url, body)
+        model_name = get_settings().config.get('model', '').lower()
+        if 'bedrock' in model_name:
+            # Optional: Add Bedrock-specific setup or logging here
+            print("Bedrock model detected. Using Bedrock for AI tasks.")
 
 
 if __name__ == '__main__':
