@@ -48,6 +48,23 @@ async def run_action():
         print("GITHUB_TOKEN not set")
         return
 
+    model_name = get_settings().config.get('model', '').lower()
+    print("model_name: ", model_name)
+
+    is_openai_model = model_name.startswith('gpt') or 'openai' in model_name
+
+    if is_openai_model:
+        OPENAI_KEY = os.environ.get('OPENAI_KEY')
+        OPENAI_ORG = os.environ.get('OPENAI_ORG')
+        if OPENAI_KEY:
+            get_settings().set("OPENAI.KEY", OPENAI_KEY)
+        else:
+            print("OPENAI_KEY not set and OpenAI model is selected. Exiting.")
+            return
+        if OPENAI_ORG:
+            get_settings().set("OPENAI.ORG", OPENAI_ORG)
+    # For Bedrock and other providers, do NOT check for OPENAI_KEY
+
     get_settings().set("GITHUB.USER_TOKEN", GITHUB_TOKEN)
     get_settings().set("GITHUB.DEPLOYMENT_TYPE", "user")
     enable_output = get_setting_or_env("GITHUB_ACTION_CONFIG.ENABLE_OUTPUT", True)
@@ -144,8 +161,6 @@ async def run_action():
                         )
                     else:
                         await PRAgent().handle_request(url, body)
-        model_name = get_settings().config.get('model', '').lower()
-        print("model_name: ", model_name)
 
 
 if __name__ == '__main__':
