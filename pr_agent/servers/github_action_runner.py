@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from typing import Union
+import sys
 
 from pr_agent.agent.pr_agent import PRAgent
 from pr_agent.config_loader import get_settings
@@ -49,7 +50,10 @@ async def run_action():
         return
 
     model_name = get_settings().config.get('model', '').lower()
+    print("DEBUG: Entered run_action")
+    sys.stdout.flush()
     print("model_name: ", model_name)
+    sys.stdout.flush()
 
     # Only require OPENAI_KEY if the model is OpenAI
     is_openai_model = (
