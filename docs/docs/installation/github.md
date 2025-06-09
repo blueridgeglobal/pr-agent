@@ -193,9 +193,8 @@ For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
 3. Push image to ECR
 
     ```shell
-
- docker tag codiumai/pr-agent:serverless <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
- docker push <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
+    docker tag codiumai/pr-agent:serverless <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
+    docker push <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
     ```
 
 4. Create a lambda function that uses the uploaded image. Set the lambda timeout to be at least 3m.
@@ -203,6 +202,28 @@ For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
 6. In the environment variables of the Lambda function, specify `AZURE_DEVOPS_CACHE_DIR` to a writable location such as /tmp. (see [link](https://github.com/Codium-ai/pr-agent/pull/450#issuecomment-1840242269))
 7. Go back to steps 8-9 of [Method 5](#run-as-a-github-app) with the function url as your Webhook URL.
     The Webhook URL would look like `https://<LAMBDA_FUNCTION_URL>/api/v1/github_webhooks`
+
+### Using AWS Secrets Manager
+
+For production Lambda deployments, use AWS Secrets Manager instead of environment variables:
+
+1. Create a secret in AWS Secrets Manager with JSON format like this:
+
+```json
+{
+  "openai.key": "sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "github.webhook_secret": "your-webhook-secret-from-step-2",
+  "github.private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"
+}
+```
+
+2. Add IAM permission `secretsmanager:GetSecretValue` to your Lambda execution role
+3. Set these environment variables in your Lambda:
+
+```bash
+AWS_SECRETS_MANAGER__SECRET_ARN=arn:aws:secretsmanager:us-east-1:123456789012:secret:pr-agent-secrets-AbCdEf
+CONFIG__SECRET_PROVIDER=aws_secrets_manager
+```
 
 ---
 

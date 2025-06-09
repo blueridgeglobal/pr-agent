@@ -26,6 +26,26 @@ You can state a name of a specific component in the PR to get documentation only
 /add_docs component_name
 ```
 
+## Manual triggering
+
+Comment `/add_docs` on a PR to invoke it manually.
+
+## Automatic triggering
+
+To automatically run the `add_docs` tool when a pull request is opened, define in a [configuration file](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/):
+
+
+```toml
+[github_app]
+pr_commands = [
+    "/add_docs",
+    ...
+]
+```
+
+The `pr_commands` list defines commands that run automatically when a PR is opened.
+Since this is under the [github_app] section, it only applies when using the Qodo Merge GitHub App in GitHub environments.
+
 ## Configuration options
 
 - `docs_style`: The exact style of the documentation (for python docstring). you can choose between: `google`, `numpy`, `sphinx`, `restructuredtext`, `plain`. Default is `sphinx`.
