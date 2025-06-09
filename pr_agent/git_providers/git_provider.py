@@ -133,7 +133,7 @@ class GitProvider(ABC):
     def reply_to_comment_from_comment_id(self, comment_id: int, body: str):
         pass
 
-    def get_pr_description(self, full: bool = True, split_changes_walkthrough=False) -> str or tuple:
+    def get_pr_description(self, full: bool = True, split_changes_walkthrough=False) -> str | tuple:
         from pr_agent.algo.utils import clip_tokens
         from pr_agent.config_loader import get_settings
         max_tokens_description = get_settings().get("CONFIG.MAX_DESCRIPTION_TOKENS", None)
@@ -228,7 +228,7 @@ class GitProvider(ABC):
                                    update_header: bool = True,
                                    name='review',
                                    final_update_message=True):
-        self.publish_comment(pr_comment)
+        return self.publish_comment(pr_comment)
 
     def publish_persistent_comment_full(self, pr_comment: str,
                                    initial_header: str,
@@ -250,14 +250,13 @@ class GitProvider(ABC):
                     # response = self.mr.notes.update(comment.id, {'body': pr_comment_updated})
                     self.edit_comment(comment, pr_comment_updated)
                     if final_update_message:
-                        self.publish_comment(
+                        return self.publish_comment(
                             f"**[Persistent {name}]({comment_url})** updated to latest commit {latest_commit_url}")
-                    return
+                    return comment
         except Exception as e:
             get_logger().exception(f"Failed to update persistent review, error: {e}")
             pass
-        self.publish_comment(pr_comment)
-
+        return self.publish_comment(pr_comment)
 
     @abstractmethod
     def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str, original_suggestion=None):
@@ -285,7 +284,7 @@ class GitProvider(ABC):
 
     def get_comment_url(self, comment) -> str:
         return ""
-           
+
     def get_review_thread_comments(self, comment_id: int) -> list[dict]:
         pass
 
