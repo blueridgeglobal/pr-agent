@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from typing import Union
+import sys
 
 from pr_agent.agent.pr_agent import PRAgent
 from pr_agent.config_loader import get_settings
@@ -34,8 +35,6 @@ async def run_action():
     # Get environment variables
     GITHUB_EVENT_NAME = os.environ.get('GITHUB_EVENT_NAME')
     GITHUB_EVENT_PATH = os.environ.get('GITHUB_EVENT_PATH')
-    OPENAI_KEY = os.environ.get('OPENAI_KEY') or os.environ.get('OPENAI.KEY')
-    OPENAI_ORG = os.environ.get('OPENAI_ORG') or os.environ.get('OPENAI.ORG')
     GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
     # get_settings().set("CONFIG.PUBLISH_OUTPUT_PROGRESS", False)
 
@@ -50,14 +49,32 @@ async def run_action():
         print("GITHUB_TOKEN not set")
         return
 
-    # Set the environment variables in the settings
-    if OPENAI_KEY:
-        get_settings().set("OPENAI.KEY", OPENAI_KEY)
-    else:
-        # Might not be set if the user is using models not from OpenAI
-        print("OPENAI_KEY not set")
-    if OPENAI_ORG:
-        get_settings().set("OPENAI.ORG", OPENAI_ORG)
+    model_name = get_settings().config.get('model', '').lower()
+    print("DEBUG: Entered run_action")
+    sys.stdout.flush()
+    print("model_name: ", model_name)
+    sys.stdout.flush()
+
+    # Only require OPENAI_KEY if the model is OpenAI
+    is_openai_model = (
+        model_name.startswith('gpt') or
+        model_name.startswith('openai') or
+        model_name in ['gpt-3.5-turbo', 'gpt-4', 'gpt-4o', 'gpt-4-turbo', 'gpt-4-32k']  # add any other OpenAI model names you use
+    )
+    print("is_openai_model: ", is_openai_model)
+
+    if is_openai_model:
+        OPENAI_KEY = os.environ.get('OPENAI_KEY')
+        OPENAI_ORG = os.environ.get('OPENAI_ORG')
+        if OPENAI_KEY:
+            get_settings().set("OPENAI.KEY", OPENAI_KEY)
+        else:
+            print("OPENAI_KEY not set and OpenAI model is selected. Exiting.")
+            return
+        if OPENAI_ORG:
+            get_settings().set("OPENAI.ORG", OPENAI_ORG)
+    # For Bedrock and other providers, do NOT check for OPENAI_KEY
+
     get_settings().set("GITHUB.USER_TOKEN", GITHUB_TOKEN)
     get_settings().set("GITHUB.DEPLOYMENT_TYPE", "user")
     enable_output = get_setting_or_env("GITHUB_ACTION_CONFIG.ENABLE_OUTPUT", True)

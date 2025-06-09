@@ -3,6 +3,7 @@ import litellm
 import openai
 import requests
 from litellm import acompletion
+from langfuse import Langfuse
 from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
 
 from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS
@@ -14,6 +15,11 @@ import json
 
 OPENAI_RETRIES = 5
 
+langfuse = Langfuse(
+    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+    host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+)
 
 class LiteLLMAIHandler(BaseAiHandler):
     """
@@ -370,8 +376,54 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
 
+            if "bedrock" in model:
+                trace = langfuse.trace(
+                    name="bedrock_llm_call",
+                    input=system + "\n" + user,
+                    metadata={"model": model}
+                )
+                try:
+                    # Call Bedrock model
+                    response, usage, cost, timings = await acompletion(**kwargs)
+                    # Optionally, add a generation for more detail
+                    generation = trace.generation(
+                        name="generation",
+                        model=model,
+                        input=messages,
+                        usage_details=usage,
+                        cost_details=cost,
+                        start_time=timings["start_time"],
+                        completion_start_time=timings["completion_start_time"],
+                        end_time=timings["end_time"]
+                    )
+                    generation.end()
+                    trace.end(output=response)
+                except Exception as e:
+                    trace.end(output=str(e), level="ERROR")
+                    raise
+                if response is None or len(response["choices"]) == 0:
+                    raise openai.APIError
+                else:
+                    resp = response["choices"][0]['message']['content']
+                    finish_reason = response["choices"][0]["finish_reason"]
+                    get_logger().debug(f"\nAI response:\n{resp}")
+
+                    # log the full response for debugging
+                    response_log = self.prepare_logs(response, system, user, resp, finish_reason)
+                    get_logger().debug("Full_response", artifact=response_log)
+
+                    # for CLI debugging
+                    if get_settings().config.verbosity_level >= 2:
+                        get_logger().info(f"\nAI response:\n{resp}")
+
+                return resp, finish_reason
+            else:
+                response = await acompletion(**kwargs)
+        except (openai.APIError, openai.APITimeoutError) as e:
+            get_logger().warning(f"Error during LLM inference: {e}")
+            raise
             response = await acompletion(**kwargs)
-        except openai.RateLimitError as e:
+        except (openai.RateLimitError) as e:
             get_logger().error(f"Rate limit error during LLM inference: {e}")
             raise
         except openai.APIError as e:
