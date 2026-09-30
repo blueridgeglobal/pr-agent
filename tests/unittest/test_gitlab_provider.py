@@ -1130,7 +1130,7 @@ class TestGitLabProvider:
         assert discussions == [
             {
                 "thread_id": "bot-resolved",
-                "status": "resolved",
+                "status": "auto_resolved",
                 "file": "src/app.py",
                 "start_line": 12,
                 "end_line": 12,
@@ -1155,6 +1155,69 @@ class TestGitLabProvider:
                 "suggestion": _AGENT_BODY,
                 "replies": [],
             },
+        ]
+
+    def test_get_code_suggestion_thread_context_reports_applied_suggestions(self, gitlab_provider):
+        gitlab_provider._own_user_id = _BOT_USER_ID
+        applied = _thread_note(resolved=True, resolved_by={'id': _BOT_USER_ID, 'name': 'GitLab Bot'})
+        applied['suggestions'] = [{'id': 1, 'applied': True}]
+        not_applied = _thread_note()
+        not_applied['suggestions'] = [{'id': 2, 'applied': False}]
+
+        gitlab_provider.mr = MagicMock()
+        gitlab_provider.mr.discussions.list.return_value = [
+            _thread([applied], discussion_id='applied'),
+            _thread([not_applied], discussion_id='pending'),
+        ]
+
+        discussions = json.loads(gitlab_provider.get_code_suggestion_thread_context())
+
+        assert [(d["thread_id"], d["status"]) for d in discussions] == [("pending", "open"), ("applied", "applied")]
+
+    def test_get_code_suggestion_thread_context_treats_bot_resolution_as_resolved_when_identity_is_unknown(
+            self, gitlab_provider):
+        gitlab_provider._own_user_id = None
+        note = _thread_note(resolved=True, resolved_by={'id': _BOT_USER_ID, 'name': 'GitLab Bot'})
+
+        gitlab_provider.mr = MagicMock()
+        gitlab_provider.mr.discussions.list.return_value = [_thread([note], discussion_id='d1')]
+
+        discussions = json.loads(gitlab_provider.get_code_suggestion_thread_context())
+
+        assert discussions[0]["status"] == "resolved"
+
+    def test_get_code_suggestion_thread_context_uses_the_multi_line_range(self, gitlab_provider):
+        gitlab_provider._own_user_id = _BOT_USER_ID
+        note = _thread_note()
+        note['position']['line_range'] = {
+            'start': {'new_line': 10, 'old_line': None},
+            'end': {'new_line': 14, 'old_line': None},
+        }
+        deletion = _thread_note(line_key='old_line')
+        deletion['position']['line_range'] = {
+            'start': {'new_line': None, 'old_line': 3},
+            'end': {'new_line': None, 'old_line': 5},
+        }
+        renamed = _thread_note(line_key=None)
+        renamed['position'].update({'old_path': 'src/old_name.py', 'new_path': 'src/new_name.py'})
+        renamed['position']['line_range'] = {
+            'start': {'new_line': 7, 'old_line': None},
+            'end': {'new_line': 8, 'old_line': None},
+        }
+
+        gitlab_provider.mr = MagicMock()
+        gitlab_provider.mr.discussions.list.return_value = [
+            _thread([note], discussion_id='range'),
+            _thread([deletion], discussion_id='deleted'),
+            _thread([renamed], discussion_id='renamed'),
+        ]
+
+        discussions = json.loads(gitlab_provider.get_code_suggestion_thread_context())
+
+        assert [(d["thread_id"], d["file"], d["start_line"], d["end_line"]) for d in discussions] == [
+            ("renamed", "src/new_name.py", 7, 8),
+            ("deleted", "src/app.py", 3, 5),
+            ("range", "src/app.py", 10, 14),
         ]
 
     def test_get_code_suggestion_thread_context_truncates_messages_and_replies(self, gitlab_provider):

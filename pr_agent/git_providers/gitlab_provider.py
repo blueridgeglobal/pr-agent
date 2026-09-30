@@ -130,6 +130,28 @@ def _eligible_own_inline_thread(discussion, own_user_id: int):
     return position
 
 
+def _suggestion_thread_location(position: dict) -> tuple:
+    """Return (path, start, end) of an inline note, or (None, None, None) when it is not anchored to a line.
+
+    Use the multi-line `line_range` when GitLab reports one, else the single anchored line. Prefer new-file
+    coordinates over old-file ones and pick the path from the same side, so renamed files map correctly.
+    """
+    line_range = position.get('line_range') if isinstance(position.get('line_range'), dict) else {}
+    for side, path_key in (('new_line', 'new_path'), ('old_line', 'old_path')):
+        edges = []
+        for key in ('start', 'end'):
+            edge = line_range.get(key) if isinstance(line_range.get(key), dict) else {}
+            edges.append(edge.get(side))
+        start, end = edges
+        if isinstance(start, int) and isinstance(end, int):
+            return position.get(path_key), min(start, end), max(start, end)
+    for side, path_key in (('new_line', 'new_path'), ('old_line', 'old_path')):
+        line = position.get(side)
+        if isinstance(line, int):
+            return position.get(path_key), line, line
+    return None, None, None
+
+
 def _flagged_line_removed(position: dict, removed_lines: dict) -> bool:
     # The compare base is the comment's head sha, so base coordinates are the
     # comment-time coordinates: a flagged line resolves only when that exact
@@ -1179,8 +1201,8 @@ class GitLabProvider(GitProvider):
             opener = notes[0] if notes and isinstance(notes[0], dict) else {}
             body = opener.get('body')
             position = opener.get('position') if isinstance(opener.get('position'), dict) else {}
-            line = position.get('new_line') or position.get('old_line')
-            if not isinstance(body, str) or not is_agent_inline_comment(body) or not isinstance(line, int):
+            path, start_line, end_line = _suggestion_thread_location(position)
+            if not isinstance(body, str) or not is_agent_inline_comment(body) or start_line is None:
                 continue
             try:
                 authored_by_agent = self.is_comment_authored_by_pr_agent(opener)
@@ -1194,14 +1216,30 @@ class GitLabProvider(GitProvider):
                 replies.append((author.get('name') or author.get('username'), note.get('body')))
             yield CodeSuggestionThread(
                 thread_id=discussion.id,
-                status="resolved" if opener.get('resolved') is True else "open",
-                file=position.get('new_path') if position.get('new_line') else position.get('old_path'),
-                start_line=line,
-                end_line=line,
+                status=self._code_suggestion_thread_status(opener),
+                file=path,
+                start_line=start_line,
+                end_line=end_line,
                 suggestion=body,
                 replies=replies,
                 authored_by_agent=authored_by_agent,
             )
+
+    def _code_suggestion_thread_status(self, opener: dict) -> str:
+        """Return `applied` (suggestion applied through the GitLab UI), `auto_resolved` (closed by the verified
+        PR-Agent user, e.g. the outdated/fixed thread sweeps), `resolved` (closed by anyone else, or by an
+        unverifiable user) or `open`."""
+        suggestions = opener.get('suggestions') or []
+        if any(isinstance(suggestion, dict) and suggestion.get('applied') for suggestion in suggestions):
+            return "applied"
+        if opener.get('resolved') is not True:
+            return "open"
+        resolved_by = opener.get('resolved_by') if isinstance(opener.get('resolved_by'), dict) else {}
+        own_user_id = self._get_own_user_id()
+        if own_user_id is not None and resolved_by.get('id') is not None \
+                and str(resolved_by.get('id')) == str(own_user_id):
+            return "auto_resolved"
+        return "resolved"
 
     def is_comment_authored_by_pr_agent(self, comment) -> bool:
         if isinstance(comment, dict):
