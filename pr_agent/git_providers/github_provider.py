@@ -1843,6 +1843,11 @@ class GithubProvider(GitProvider):
             get_logger().warning(f"Failed to publish labels, error: {e}")
 
     def get_pr_labels(self, update=False):
+        # A failed read must never look like "this PR has no labels": publish_labels issues a PUT
+        # that replaces the whole set, so an empty result would wipe every label a human added.
+        # Report None so callers skip publishing. A previously read set is deliberately not reused
+        # here: it can already be out of date, and publishing against it would drop any label
+        # added since that read, which is the same data loss this guards against.
         # Fetch and read under separate handlers: the response-shape errors below would otherwise
         # also swallow the same types raised by the fetch, where they mean a programming error.
         if not update:
@@ -1850,12 +1855,12 @@ class GithubProvider(GitProvider):
                 labels = self.pr.labels
             except (GithubException, RequestException) as e:
                 get_logger().exception(f"Failed to get labels, error: {e}")
-                return []
+                return None
             try:
                 return [label.name for label in labels]
             except (TypeError, AttributeError) as e:
                 get_logger().exception(f"Failed to read the labels payload, error: {e}")
-                return []
+                return None
 
         # obtain the latest labels. Maybe they changed while the AI was running
         try:
@@ -1863,12 +1868,12 @@ class GithubProvider(GitProvider):
                 "GET", f"{self.pr.issue_url}/labels")
         except (GithubException, RequestException) as e:
             get_logger().exception(f"Failed to get labels, error: {e}")
-            return []
+            return None
         try:
             return [label['name'] for label in labels]
         except (KeyError, TypeError) as e:
             get_logger().exception(f"Failed to read the labels payload, error: {e}")
-            return []
+            return None
 
     def get_commit_messages(self) -> str:
         """
