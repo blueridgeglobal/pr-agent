@@ -64,7 +64,7 @@ from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.git_provider import (
     GitProvider,
-    IncompleteBitbucketPullRequestFilesError,
+    IncompleteProviderPullRequestFilesError,
     IncrementalPR,
     get_main_pr_language,
 )
@@ -465,7 +465,7 @@ class PRReviewer:
             # The status of the whole run must not read as success just because the error stopped here.
             record_command_failure()
             if (
-                isinstance(e, IncompleteBitbucketPullRequestFilesError)
+                isinstance(e, IncompleteProviderPullRequestFilesError)
                 or get_settings().config.get("propagate_tool_errors", False)
             ):
                 raise
@@ -477,7 +477,7 @@ class PRReviewer:
                     get_logger().exception(f"Failed to remove review progress comment, error: {e}")
             if (
                 review_failed
-                and not isinstance(review_error, IncompleteBitbucketPullRequestFilesError)
+                and not isinstance(review_error, IncompleteProviderPullRequestFilesError)
                 and get_settings().config.publish_output
                 and (
                     persistent_write_failed

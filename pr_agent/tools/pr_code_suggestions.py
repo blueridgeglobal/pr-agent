@@ -48,7 +48,7 @@ from pr_agent.config_loader import get_settings, get_verbosity_level
 from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.git_provider import (
     GitProvider,
-    IncompleteBitbucketPullRequestFilesError,
+    IncompleteProviderPullRequestFilesError,
     IncrementalPR,
     get_main_pr_language,
 )
@@ -514,7 +514,7 @@ class PRCodeSuggestions:
                             f"error: {cleanup_error}"
                         )
                 if (
-                    not isinstance(e, IncompleteBitbucketPullRequestFilesError)
+                    not isinstance(e, IncompleteProviderPullRequestFilesError)
                     and not self._output_published
                 ):
                     try:
@@ -526,7 +526,7 @@ class PRCodeSuggestions:
             # The status of the whole run must not read as success just because the error stopped here.
             record_command_failure()
             if (
-                isinstance(e, IncompleteBitbucketPullRequestFilesError)
+                isinstance(e, IncompleteProviderPullRequestFilesError)
                 or get_settings().config.get("propagate_tool_errors", False)
             ):
                 raise

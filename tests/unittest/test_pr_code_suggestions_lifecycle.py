@@ -6,7 +6,10 @@ import pytest
 
 from pr_agent.algo.types import FilePatchInfo
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers.git_provider import IncompleteBitbucketPullRequestFilesError
+from pr_agent.git_providers.git_provider import (
+    IncompleteBitbucketPullRequestFilesError,
+    IncompletePullRequestFilesError,
+)
 from pr_agent.git_providers.plain_diff_provider import PlainDiffGitProvider
 from pr_agent.tools import pr_code_suggestions as pr_code_suggestions_module
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
@@ -116,7 +119,10 @@ async def test_run_removes_progress_comment_when_cancelled(
 
 
 @pytest.mark.asyncio
-async def test_run_re_raises_incomplete_bitbucket_diff_after_progress_cleanup(monkeypatch):
+@pytest.mark.parametrize(
+    "incomplete_error_class", [IncompleteBitbucketPullRequestFilesError, IncompletePullRequestFilesError]
+)
+async def test_run_re_raises_incomplete_provider_diff_after_progress_cleanup(monkeypatch, incomplete_error_class):
     settings_snapshot = snapshot_settings(_TRACKED_SETTINGS)
     try:
         provider = MagicMock()
@@ -126,7 +132,7 @@ async def test_run_re_raises_incomplete_bitbucket_diff_after_progress_cleanup(mo
         provider.publish_comment.return_value = progress_comment
         tool = _make_tool(provider)
         tool.progress = "progress body"
-        incomplete_diff_error = IncompleteBitbucketPullRequestFilesError("incomplete aggregate diff")
+        incomplete_diff_error = incomplete_error_class("incomplete aggregate diff")
 
         monkeypatch.setattr(
             pr_code_suggestions_module,
@@ -135,7 +141,7 @@ async def test_run_re_raises_incomplete_bitbucket_diff_after_progress_cleanup(mo
         )
         _configure_published_run()
 
-        with pytest.raises(IncompleteBitbucketPullRequestFilesError) as exc_info:
+        with pytest.raises(incomplete_error_class) as exc_info:
             await tool.run()
 
         assert exc_info.value is incomplete_diff_error

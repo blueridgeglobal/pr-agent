@@ -8,7 +8,10 @@ from opentelemetry.trace import StatusCode
 import pr_agent.agent.pr_agent as pr_agent_module
 from pr_agent.algo.run_details import command_failed, get_run_details, init_run_details
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers.git_provider import IncompleteBitbucketPullRequestFilesError
+from pr_agent.git_providers.git_provider import (
+    IncompleteBitbucketPullRequestFilesError,
+    IncompletePullRequestFilesError,
+)
 from pr_agent.tools.pr_add_docs import PRAddDocs
 
 DOCUMENTED = """Code Documentation:
@@ -152,15 +155,19 @@ def test_publish_the_documented_response(publish_output, monkeypatch):
     assert provider.initial_comment_removed
 
 
-def test_incomplete_bitbucket_diff_is_re_raised_after_temporary_comment_cleanup(publish_output, monkeypatch):
+@pytest.mark.parametrize(
+    "incomplete_error_class", [IncompleteBitbucketPullRequestFilesError, IncompletePullRequestFilesError]
+)
+def test_incomplete_provider_diff_is_re_raised_after_temporary_comment_cleanup(
+        publish_output, monkeypatch, incomplete_error_class):
     async def fail_with_incomplete_diff(*_args, **_kwargs):
-        raise IncompleteBitbucketPullRequestFilesError("incomplete aggregate diff")
+        raise incomplete_error_class("incomplete aggregate diff")
 
     monkeypatch.setattr("pr_agent.tools.pr_add_docs.retry_with_fallback_models", fail_with_incomplete_diff)
     tool = PRAddDocs.__new__(PRAddDocs)
     tool.git_provider = FakeGitProvider()
 
-    with pytest.raises(IncompleteBitbucketPullRequestFilesError):
+    with pytest.raises(incomplete_error_class):
         asyncio.run(tool.run())
 
     assert tool.git_provider.initial_comment_removed

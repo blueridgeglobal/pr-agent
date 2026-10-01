@@ -13,7 +13,10 @@ from pr_agent.algo.types import FilePatchInfo
 from pr_agent.algo.utils import convert_to_markdown_v2
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers.azuredevops_provider import AzureDevopsProvider
-from pr_agent.git_providers.git_provider import IncompleteBitbucketPullRequestFilesError
+from pr_agent.git_providers.git_provider import (
+    IncompleteBitbucketPullRequestFilesError,
+    IncompletePullRequestFilesError,
+)
 from pr_agent.git_providers.github_provider import GithubProvider
 from pr_agent.git_providers.gitlab_provider import GitLabProvider
 from pr_agent.tools.pr_reviewer import PRReviewer, _review_failure_comment
@@ -800,7 +803,10 @@ async def test_run_removes_its_progress_comment_when_review_generation_fails(
 
 
 @pytest.mark.asyncio
-async def test_run_re_raises_incomplete_bitbucket_diff_after_progress_cleanup(monkeypatch):
+@pytest.mark.parametrize(
+    "incomplete_error_class", [IncompleteBitbucketPullRequestFilesError, IncompletePullRequestFilesError]
+)
+async def test_run_re_raises_incomplete_provider_diff_after_progress_cleanup(monkeypatch, incomplete_error_class):
     from pr_agent.tools import pr_reviewer as pr_reviewer_module
 
     progress_comment = MagicMock()
@@ -812,7 +818,7 @@ async def test_run_re_raises_incomplete_bitbucket_diff_after_progress_cleanup(mo
     reviewer.vars = {}
     reviewer.prediction = None
 
-    incomplete_diff_error = IncompleteBitbucketPullRequestFilesError("incomplete aggregate diff")
+    incomplete_diff_error = incomplete_error_class("incomplete aggregate diff")
     monkeypatch.setattr(pr_reviewer_module, "extract_and_cache_pr_tickets", AsyncMock())
     monkeypatch.setattr(
         pr_reviewer_module,
@@ -831,7 +837,7 @@ async def test_run_re_raises_incomplete_bitbucket_diff_after_progress_cleanup(mo
         settings.config.is_auto_command = False
         settings.config.propagate_tool_errors = False
 
-        with pytest.raises(IncompleteBitbucketPullRequestFilesError) as exc_info:
+        with pytest.raises(incomplete_error_class) as exc_info:
             await reviewer.run()
     finally:
         settings.config.publish_output = original["publish_output"]
