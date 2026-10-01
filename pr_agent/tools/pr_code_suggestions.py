@@ -46,7 +46,12 @@ from pr_agent.algo.utils import (
 )
 from pr_agent.config_loader import get_settings, get_verbosity_level
 from pr_agent.git_providers import get_git_provider_with_context
-from pr_agent.git_providers.git_provider import GitProvider, IncrementalPR, get_main_pr_language
+from pr_agent.git_providers.git_provider import (
+    GitProvider,
+    IncompleteBitbucketPullRequestFilesError,
+    IncrementalPR,
+    get_main_pr_language,
+)
 from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
 from pr_agent.tools.pr_description import insert_br_after_x_chars
@@ -462,17 +467,29 @@ class PRCodeSuggestions:
                                artifact={"traceback": traceback.format_exc()})
             if get_settings().config.publish_output:
                 if self.progress_response:
-                    self.git_provider.remove_comment(self.progress_response)
-                if not self._output_published:
+                    try:
+                        self.git_provider.remove_comment(self.progress_response)
+                    except Exception as cleanup_error:
+                        get_logger().exception(
+                            "Failed to remove code suggestions progress comment after an error, "
+                            f"error: {cleanup_error}"
+                        )
+                if (
+                    not isinstance(e, IncompleteBitbucketPullRequestFilesError)
+                    and not self._output_published
+                ):
                     try:
                         if not self.progress_response:
                             self.git_provider.remove_initial_comment()
                         self.git_provider.publish_comment("Failed to generate code suggestions for PR")
-                    except Exception as e:
-                        get_logger().exception(f"Failed to update persistent review, error: {e}")
+                    except Exception as publish_error:
+                        get_logger().exception(f"Failed to update persistent review, error: {publish_error}")
             # The status of the whole run must not read as success just because the error stopped here.
             record_command_failure()
-            if get_settings().config.get("propagate_tool_errors", False):
+            if (
+                isinstance(e, IncompleteBitbucketPullRequestFilesError)
+                or get_settings().config.get("propagate_tool_errors", False)
+            ):
                 raise
 
     async def add_self_review_text(self, pr_body):

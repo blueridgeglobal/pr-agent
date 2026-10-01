@@ -8,6 +8,7 @@ from opentelemetry.trace import StatusCode
 import pr_agent.agent.pr_agent as pr_agent_module
 from pr_agent.algo.run_details import command_failed, get_run_details, init_run_details
 from pr_agent.config_loader import get_settings
+from pr_agent.git_providers.git_provider import IncompleteBitbucketPullRequestFilesError
 from pr_agent.tools.pr_add_docs import PRAddDocs
 
 DOCUMENTED = """Code Documentation:
@@ -151,6 +152,18 @@ def test_publish_the_documented_response(publish_output, monkeypatch):
     assert provider.initial_comment_removed
 
 
+def test_incomplete_bitbucket_diff_is_re_raised_after_temporary_comment_cleanup(publish_output, monkeypatch):
+    async def fail_with_incomplete_diff(*_args, **_kwargs):
+        raise IncompleteBitbucketPullRequestFilesError("incomplete aggregate diff")
+
+    monkeypatch.setattr("pr_agent.tools.pr_add_docs.retry_with_fallback_models", fail_with_incomplete_diff)
+    tool = PRAddDocs.__new__(PRAddDocs)
+    tool.git_provider = FakeGitProvider()
+
+    with pytest.raises(IncompleteBitbucketPullRequestFilesError):
+        asyncio.run(tool.run())
+
+    assert tool.git_provider.initial_comment_removed
 @pytest.mark.parametrize("retry_results", [[True, False], [False, True]])
 def test_partial_inline_publication_keeps_every_retry_and_is_not_a_failure(
         publish_output, monkeypatch, retry_results):

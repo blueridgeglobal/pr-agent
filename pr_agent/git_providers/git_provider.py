@@ -12,6 +12,7 @@ from typing import Any, Optional, Tuple
 from urllib.parse import urlsplit
 
 from pr_agent.algo.comment_identity import (
+    PRCommandNoticeIdentity,
     add_pr_review_identity,
     comment_carries_other_identity,
     comment_matches_identity,
@@ -72,8 +73,36 @@ def _discussion_context_budget() -> int:
         return DEFAULT_DISCUSSION_CONTEXT_CHARS
 
 
-class IncompletePullRequestFilesError(RuntimeError):
-    """Represent an incomplete or inconsistent pull-request file set."""
+class IncompleteProviderPullRequestFilesError(RuntimeError):
+    """Provider-neutral base for incomplete-file failures with public notices."""
+
+    notice: str
+    notice_marker: str
+
+
+class IncompletePullRequestFilesError(IncompleteProviderPullRequestFilesError):
+    """Represent an incomplete or inconsistent GitHub pull-request file set."""
+
+    notice = (
+        "## PR-Agent command was not run\n\n"
+        "GitHub returned an incomplete or inconsistent changed-file set for this pull request, so PR-Agent stopped "
+        "instead of analyzing only part of it.\n\n"
+        "GitHub limits changed-file responses to 3,000 files. If this pull request changes more than 3,000 files, "
+        "split it into smaller pull requests and run the command again. Otherwise, retry the command."
+    )
+    notice_marker = "<!-- pr-agent:github-incomplete-files -->"
+
+
+class IncompleteBitbucketPullRequestFilesError(IncompleteProviderPullRequestFilesError):
+    """Represent Bitbucket aggregate patches that cannot align with its changed-file inventory."""
+
+    notice = (
+        "## PR-Agent command was not run\n\n"
+        "Bitbucket returned an incomplete or inconsistent pull-request diff, so PR-Agent stopped "
+        "instead of treating it as an empty change.\n\n"
+        "Retry the command and check the pull request's diff in Bitbucket if the problem persists."
+    )
+    notice_marker = PRCommandNoticeIdentity.INCOMPLETE_BITBUCKET_FILES.value
 
 
 @dataclass(frozen=True)
