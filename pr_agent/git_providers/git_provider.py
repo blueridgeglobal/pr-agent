@@ -542,8 +542,8 @@ class GitProvider(ABC):
     def get_diff_files(self) -> list[FilePatchInfo]:
         pass
 
-    def get_incremental_commits(self, is_incremental):
-        pass
+    def get_incremental_commits(self, is_incremental) -> None:
+        return None
 
     @abstractmethod
     def publish_description(self, pr_title: str, pr_body: str) -> None:
@@ -627,10 +627,10 @@ class GitProvider(ABC):
         pass
 
     def edit_comment(self, comment, body: str):
-        pass
+        return None
 
     def reply_to_comment_from_comment_id(self, comment_id: int, body: str):
-        pass
+        return None
 
     def get_pr_description(self, full: bool = True, split_changes_walkthrough=False) -> str | tuple:
         from pr_agent.algo.token_budget import clip_tokens
@@ -1070,7 +1070,7 @@ class GitProvider(ABC):
         return ""
 
     def get_review_thread_comments(self, comment_id: int) -> list[dict]:
-        pass
+        return []
 
     #### labels operations ####
     @abstractmethod
