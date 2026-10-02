@@ -413,6 +413,13 @@ class TestAzureDevopsProviderFiles:
     def _azure_item_not_found_error():
         return _item_not_found_error()
 
+    def test_diff_files_expose_filtered_lockfile_without_fetching_content(self):
+        provider = self._provider_with_change(self._change(path="/src/pnpm-lock.yaml"))
+
+        assert provider.get_diff_files() == []
+        assert provider.get_filtered_diff_file_names() == ["/src/pnpm-lock.yaml"]
+        provider.azure_devops_client.get_item.assert_not_called()
+
     @classmethod
     def _provider_with_incremental_rename(cls, *get_item_results):
         incremental = IncrementalPR(True)

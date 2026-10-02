@@ -285,6 +285,7 @@ class BitbucketServerProvider(GitProvider):
                     raise e
 
         diff_files = []
+        invalid_files_names = []
         original_file_content_str = ""
         new_file_content_str = ""
 
@@ -296,6 +297,7 @@ class BitbucketServerProvider(GitProvider):
             file_path = change['path']['toString']
             if not is_valid_file(file_path.split("/")[-1]):
                 get_logger().info(f"Skipping a non-code file: {file_path}")
+                invalid_files_names.append(file_path)
                 continue
 
             old_filename = None
@@ -342,6 +344,7 @@ class BitbucketServerProvider(GitProvider):
                 )
             )
 
+        self.filtered_diff_file_names = invalid_files_names
         self.diff_files = diff_files
         return diff_files
 
