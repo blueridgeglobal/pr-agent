@@ -29,6 +29,7 @@ from pr_agent.algo.token_budget import AttemptTokenBudget
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (
     ModelType,
+    filter_generated_labels,
     get_user_labels,
     load_yaml,
     set_custom_labels,
@@ -216,7 +217,7 @@ class PRDescription:
             if get_settings().config.publish_output:
                 # Emit to the optional external sinks before touching the provider, so a sink
                 # still receives the description if publishing it to the PR fails.
-                push_outputs("describe", payload=self.data or {}, markdown=pr_body)
+                push_outputs("describe", payload=self._prepare_output_payload(), markdown=pr_body)
 
                 # publish labels
                 if (
@@ -794,6 +795,18 @@ class PRDescription:
             return False
         return True
 
+    def _prepare_output_payload(self) -> dict:
+        """Filter generated label fields for external sinks without mutating model data."""
+        payload = dict(self.data or {})
+        for field in ("labels", "type"):
+            if field not in payload:
+                continue
+            values = payload[field]
+            if isinstance(values, str):
+                values = values.split(",")
+            payload[field] = filter_generated_labels(values if isinstance(values, list) else [])
+        return payload
+
     def _prepare_labels(self) -> List[str]:
         pr_labels = []
 
@@ -819,7 +832,7 @@ class PRDescription:
                         pr_labels[i] = d[label_i]
         except Exception as e:
             get_logger().error(f"Error converting labels to original case {self.pr_id}: {e}")
-        return pr_labels
+        return filter_generated_labels(pr_labels)
 
     def _prepare_pr_answer_with_markers(self) -> Tuple[str, str]:
         get_logger().info(f"Using description marker replacements {self.pr_id}")
