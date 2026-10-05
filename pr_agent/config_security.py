@@ -54,6 +54,8 @@ REPO_HOST_ONLY_KEYS_BY_SECTION = {
     # an operator choice, and this is what makes it one: without it, [config] is otherwise
     # repo-configurable, so a reviewed repo's .pr_agent.toml or a comment argument could
     # supply the pattern. The operator still sets it through host configuration.
+    # global_settings_repo names the repository whose .pr_agent.toml applies to every repository
+    # in the namespace, so the operator chooses it, not a reviewed repo or a comment argument.
     # extra_config_url is host-only: the next apply_repo_settings() call fetches it over
     # HTTP(S) (attaching PR_AGENT_EXTRA_CONFIG_AUTH_HEADER) and merges *every* section of the
     # response into runtime settings without host-key filtering. A malicious reviewed repo
@@ -63,6 +65,7 @@ REPO_HOST_ONLY_KEYS_BY_SECTION = {
     "config": frozenset({
         "extra_config_url",
         "description_issue_regex",
+        "global_settings_repo",
         "repo_context_max_sibling_files",
         "repo_context_sibling_repos",
     }),
