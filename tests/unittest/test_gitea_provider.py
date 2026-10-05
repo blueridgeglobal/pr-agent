@@ -1069,6 +1069,19 @@ class TestGiteaProviderUrlParsing:
         assert provider._parse_issue_url(
             "https://gitea.example.com/api/v1/repos/owner/repo/issues/5") == ("owner", "repo", 5)
 
+    @pytest.mark.parametrize("setting", ["GITEA.URL", "GITEA.WEB_URL"])
+    def test_parse_urls_of_an_instance_served_under_a_subpath(self, setting):
+        provider = self._provider()
+        settings = {"GITEA.URL": "https://gitea.com", "GITEA.WEB_URL": "", setting: "https://host/git/"}
+        with patch("pr_agent.git_providers.gitea_provider.get_settings") as mock_get_settings:
+            mock_get_settings.return_value.get.side_effect = lambda key, default=None: settings.get(key, default)
+            assert provider._parse_pr_url("https://host/git/owner/repo/pulls/1") == ("owner", "repo", 1)
+            assert provider._parse_pr_url("https://host/git/api/v1/repos/owner/repo/pulls/1") == ("owner", "repo", 1)
+            assert provider._parse_issue_url("https://host/git/owner/repo/issues/5") == ("owner", "repo", 5)
+            # Strip the install path only as a whole leading segment.
+            with pytest.raises(ValueError):
+                provider._parse_pr_url("https://host/gitea/owner/repo/pulls/1")
+
 
 class TestGiteaProviderInlineCommentStatus:
     """Regression tests for the ``/improve`` inline-comment path:

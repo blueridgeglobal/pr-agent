@@ -240,13 +240,26 @@ class GiteaProvider(GitProvider):
         except Exception as e:
             self.logger.error(f"Error getting diff content: {str(e)}")
 
+    @staticmethod
+    def _url_path_parts(url: str) -> list[str]:
+        """Split a PR or issue URL into path parts that start at the owner.
+
+        Strip the install path of the configured ``GITEA.URL`` or ``GITEA.WEB_URL`` first,
+        so an instance served under a subpath (``https://host/gitea/owner/repo/pulls/1``)
+        parses like a root install, then strip the ``/api/v1/repos`` API prefix.
+        """
+        path = urlparse(url).path
+        for base_url in (get_settings().get("GITEA.URL", ""), get_settings().get("GITEA.WEB_URL", "")):
+            base_path = urlparse(base_url or "").path.rstrip("/")
+            if base_path and path.startswith(base_path + "/"):
+                path = path[len(base_path):]
+                break
+        if path.startswith("/api/v1/repos"):
+            path = path[len("/api/v1/repos"):]
+        return path.strip('/').split('/')
+
     def _parse_pr_url(self, pr_url: str) -> Tuple[str, str, int]:
-        parsed_url = urlparse(pr_url)
-
-        if parsed_url.path.startswith("/api/v1/repos"):
-            parsed_url = urlparse(pr_url.replace("/api/v1/repos", ""))
-
-        path_parts = parsed_url.path.strip('/').split('/')
+        path_parts = self._url_path_parts(pr_url)
         if len(path_parts) < 4 or path_parts[2] != 'pulls':
             raise ValueError("The provided URL does not appear to be a Gitea PR URL")
 
@@ -261,12 +274,7 @@ class GiteaProvider(GitProvider):
         return owner, repo, pr_number
 
     def _parse_issue_url(self, issue_url: str) -> Tuple[str, str, int]:
-        parsed_url = urlparse(issue_url)
-
-        if parsed_url.path.startswith("/api/v1/repos"):
-            parsed_url = urlparse(issue_url.replace("/api/v1/repos", ""))
-
-        path_parts = parsed_url.path.strip('/').split('/')
+        path_parts = self._url_path_parts(issue_url)
         if len(path_parts) < 4 or path_parts[2] != 'issues':
             raise ValueError("The provided URL does not appear to be a Gitea issue URL")
 
