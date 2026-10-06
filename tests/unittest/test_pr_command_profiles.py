@@ -74,9 +74,11 @@ class _IdentityProvider:
 
 
 class _Request:
-    def __init__(self, payload):
-        self.headers = {"authorization": "JWT e30.eyJpc3MiOiJjbGllbnQifQ.signature"}
+    def __init__(self, payload, headers=None, method="POST", path="/webhook", query=""):
+        self.headers = headers if headers is not None else {"authorization": "JWT e30.eyJpc3MiOiJjbGllbnQifQ.signature"}
         self._payload = payload
+        self.method = method
+        self.url = type("URL", (), {"path": path, "query": query})()
 
     async def json(self):
         return self._payload
@@ -290,7 +292,11 @@ async def _run_bitbucket_created_webhook(
     monkeypatch.setattr(bitbucket_app, "should_process_pr_logic", should_process_pr_logic)
     monkeypatch.setattr(bitbucket_app, "get_fork_safe_secret_provider", lambda: secret_provider)
     monkeypatch.setattr(bitbucket_app, "get_bearer_token", get_bearer_token)
-    monkeypatch.setattr(bitbucket_app.jwt, "decode", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        bitbucket_app.jwt,
+        "decode",
+        lambda *args, **kwargs: {"qsh": bitbucket_app._compute_qsh("POST", "/webhook")},
+    )
     monkeypatch.setattr(bitbucket_app, "get_identity_provider", RecordingIdentityProvider)
     monkeypatch.setattr(bitbucket_app, "apply_repo_settings", apply_repo_settings)
     monkeypatch.setattr(bitbucket_app, "_run_commands_bitbucket", run_commands)
@@ -436,7 +442,11 @@ async def _run_bitbucket_push_webhook(
     monkeypatch.setattr(bitbucket_app, "is_bot_user", lambda _data: False)
     monkeypatch.setattr(bitbucket_app, "get_fork_safe_secret_provider", lambda: secret_provider)
     monkeypatch.setattr(bitbucket_app, "get_bearer_token", get_bearer_token)
-    monkeypatch.setattr(bitbucket_app.jwt, "decode", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        bitbucket_app.jwt,
+        "decode",
+        lambda *args, **kwargs: {"qsh": bitbucket_app._compute_qsh("POST", "/webhook")},
+    )
     monkeypatch.setattr(bitbucket_app, "get_identity_provider", _IdentityProvider)
     monkeypatch.setattr(bitbucket_app, "apply_repo_settings", apply_repo_settings)
     monkeypatch.setattr(bitbucket_app, "should_process_pr_logic", should_process_pr_logic)
@@ -547,7 +557,11 @@ async def test_bitbucket_app_push_uses_shared_dedupe_slot(monkeypatch, proceed):
     monkeypatch.setattr(bitbucket_app, "is_bot_user", lambda _data: False)
     monkeypatch.setattr(bitbucket_app, "get_fork_safe_secret_provider", lambda: secret_provider)
     monkeypatch.setattr(bitbucket_app, "get_bearer_token", get_bearer_token)
-    monkeypatch.setattr(bitbucket_app.jwt, "decode", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        bitbucket_app.jwt,
+        "decode",
+        lambda *args, **kwargs: {"qsh": bitbucket_app._compute_qsh("POST", "/webhook")},
+    )
     monkeypatch.setattr(bitbucket_app, "get_identity_provider", _IdentityProvider)
     monkeypatch.setattr(bitbucket_app, "_run_commands_bitbucket", run_commands)
     monkeypatch.setattr(bitbucket_app, "apply_repo_settings", lambda _url: None)

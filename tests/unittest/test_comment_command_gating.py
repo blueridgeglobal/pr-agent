@@ -17,11 +17,13 @@ from pr_agent.servers.utils import is_ask_command_comment, is_command_comment
 
 
 class _Request:
-    def __init__(self, payload, headers=None):
+    def __init__(self, payload, headers=None, method="POST", path="/webhook", query=""):
         self.headers = headers if headers is not None else {
             "authorization": "JWT e30.eyJpc3MiOiJjbGllbnQifQ.signature"
         }
         self._payload = payload
+        self.method = method
+        self.url = type("URL", (), {"path": path, "query": query})()
 
     async def json(self):
         return self._payload
@@ -275,7 +277,11 @@ async def _run_bitbucket_comment_webhook(monkeypatch, comment_body):
     monkeypatch.setattr(bitbucket_app, "is_bot_user", lambda _data: False)
     monkeypatch.setattr(bitbucket_app, "get_fork_safe_secret_provider", lambda: secret_provider)
     monkeypatch.setattr(bitbucket_app, "get_bearer_token", get_bearer_token)
-    monkeypatch.setattr(bitbucket_app.jwt, "decode", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        bitbucket_app.jwt,
+        "decode",
+        lambda *args, **kwargs: {"qsh": bitbucket_app._compute_qsh("POST", "/webhook")},
+    )
     monkeypatch.setattr(bitbucket_app, "get_identity_provider", EligibleIdentityProvider)
     monkeypatch.setattr(bitbucket_app, "PRAgent", FakeAgent)
 
