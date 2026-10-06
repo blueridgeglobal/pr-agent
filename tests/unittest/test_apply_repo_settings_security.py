@@ -68,6 +68,9 @@ SNAPSHOT_SECTIONS = (
     "MOONSHOT",
     "DATABRICKS",
     "OPENROUTER",
+    "GITHUB",
+    "BITBUCKET",
+    "GITLAB",
     "GITEA",
     "LANGUAGE_EXTENSION_MAP_ORG",
 )
@@ -454,6 +457,33 @@ def test_repo_settings_filter_provider_credentials_but_apply_safe_keys(monkeypat
 )
 def test_provider_connection_keys_are_host_only_for_repo_and_cli(section, key):
     assert is_repo_host_only_key(section, key)
+    assert CliArgs.validate_user_args([f"--{section}.{key}=untrusted"])[0] is False
+
+
+@pytest.mark.parametrize(
+    ("section", "key"),
+    [
+        ("github", "deployment_type"),
+        ("bitbucket", "auth_type"),
+        ("gitlab", "auth_type"),
+        ("gitlab", "ssl_verify"),
+        ("gitea", "skip_ssl_verification"),
+        ("gitea", "ssl_ca_cert"),
+    ],
+)
+def test_repo_settings_cannot_override_provider_authentication_or_tls(
+    monkeypatch, settings_snapshot, section, key
+):
+    provider = FakeGitProvider(repo_settings_bytes=f'[{section}]\n{key} = "repo-controlled"\n'.encode())
+    _install_provider(monkeypatch, provider)
+
+    settings = get_settings()
+    settings.set("config.use_repo_settings_file", True)
+    settings.set(f"{section}.{key}", "host-controlled")
+
+    apply_repo_settings("https://example.com/owner/repo/pull/1")
+
+    assert _section(settings, section).get(key) == "host-controlled"
     assert CliArgs.validate_user_args([f"--{section}.{key}=untrusted"])[0] is False
 
 
