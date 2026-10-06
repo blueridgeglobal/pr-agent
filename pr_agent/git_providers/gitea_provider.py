@@ -1,3 +1,4 @@
+import functools
 import json
 from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -22,6 +23,7 @@ from pr_agent.git_providers.git_provider import (
     cache_languages,
     redact_credentials,
 )
+from pr_agent.git_providers.request_timeout import get_http_request_timeout
 from pr_agent.log import get_logger
 
 # Shipped default for the [gitea] url setting in configuration.toml. A value
@@ -50,6 +52,17 @@ class _GiteaCommitAdapter:
         raw = raw or {}
         self.sha = raw.get("sha", "")
         self.html_url = raw.get("html_url", "")
+
+
+def _with_default_request_timeout(call_api):
+    """Fill in connect/read bounds when giteapy forwards an unset request timeout."""
+    @functools.wraps(call_api)
+    def call_api_with_timeout(*args, **kwargs):
+        if not kwargs.get("_request_timeout"):
+            kwargs["_request_timeout"] = (get_http_request_timeout(),) * 2
+        return call_api(*args, **kwargs)
+
+    return call_api_with_timeout
 
 
 class GiteaProvider(GitProvider):
@@ -84,6 +97,7 @@ class GiteaProvider(GitProvider):
         configuration.ssl_ca_cert = get_settings().get("GITEA.SSL_CA_CERT", None)
 
         client = giteapy.ApiClient(configuration)
+        client.call_api = _with_default_request_timeout(client.call_api)
         self.repo_api = RepoApi(client)
         self.owner = None
         self.repo = None
