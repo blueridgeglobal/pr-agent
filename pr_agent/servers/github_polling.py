@@ -43,6 +43,12 @@ class _CommentPaginationDrift(_InvalidPaginationMetadata):
 _RETRY_POLLING_NOTIFICATION = object()
 
 
+def _pr_comments_url(pr_url: str) -> str:
+    """Map an API pull request URL to its issue comments URL."""
+    base, sep, number = pr_url.rpartition("/pulls/")
+    return f"{base}/issues/{number}/comments" if sep else f"{pr_url}/comments"
+
+
 def _get_polling_request_timeout() -> float:
     """Bound the timeout for notification fallback requests."""
     value = global_settings.get("github.polling_request_timeout", DEFAULT_POLLING_REQUEST_TIMEOUT)
@@ -292,7 +298,7 @@ async def is_valid_notification(
                             return True, handled_ids, comment, comment_body, pr_url, user_tag
                         else: # we could not find the user tag in the latest comment. Check previous comments
                             # get all comments in the PR
-                            requests_url = f"{pr_url}/comments".replace("pulls", "issues")
+                            requests_url = _pr_comments_url(pr_url)
                             try:
                                 comments = (await _fetch_comment_history(session, requests_url, headers))[::-1]
                             except _CommentPaginationDrift:
