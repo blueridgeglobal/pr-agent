@@ -25,6 +25,7 @@ from pr_agent.git_providers.git_provider import (
 )
 from pr_agent.git_providers.request_timeout import get_http_request_timeout
 from pr_agent.log import get_logger
+from pr_agent.mosaico.diff_provider import parse_unified_diff
 
 # Shipped default for the [gitea] url setting in configuration.toml. A value
 # equal to this must be treated as "unset" when resolving the user-facing base
@@ -233,25 +234,7 @@ class GiteaProvider(GitProvider):
                     pr_number=self.pr_number
             )
 
-            lines = diff_contents.splitlines()
-            current_file = None
-            current_patch = []
-            file_patches = {}
-            for line in lines:
-                if line.startswith('diff --git'):
-                    if current_file and current_patch:
-                        file_patches[current_file] = '\n'.join(current_patch)
-                        current_patch = []
-                    current_file = line.split(' b/')[-1]
-                elif line.startswith('@@') and not current_patch:
-                    current_patch = [line]
-                elif current_patch:
-                    current_patch.append(line)
-
-            if current_file and current_patch:
-                file_patches[current_file] = '\n'.join(current_patch)
-
-            self.file_diffs = file_patches
+            self.file_diffs = {f.filename: f.patch for f in parse_unified_diff(diff_contents)}
         except Exception as e:
             self.logger.error(f"Error getting diff content: {str(e)}")
 
