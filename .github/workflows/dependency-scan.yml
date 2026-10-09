@@ -162,6 +162,23 @@ jobs:
             if [ "$INPUT_FAIL" == "true" ]; then echo "exit_code=1"; else echo "exit_code=0"; fi
           } >> "$GITHUB_OUTPUT"
 
+      - name: Add Custom Secret Rules
+        run: |
+          if [ ! -f trivy-secret.yaml ]; then
+            cat > trivy-secret.yaml <<'RULES'
+          rules:
+            - id: sonarqube-token
+              category: SonarQube
+              title: SonarQube Token
+              severity: CRITICAL
+              regex: '\bsq[pua]_[0-9a-f]{40}\b'
+              keywords:
+                - sqp_
+                - squ_
+                - sqa_
+          RULES
+          fi
+
       - name: Run Trivy (full JSON results)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
