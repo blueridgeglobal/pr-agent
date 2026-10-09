@@ -408,6 +408,41 @@ class TestConvertToMarkdown:
         assert "- gui_app.py" not in markdown
         assert markdown.count("<tr><td>") == markdown.count("</td></tr>") == 3
 
+    @pytest.mark.parametrize("gfm_supported", [True, False])
+    def test_failure_modes_render_safe_structured_cases(self, gfm_supported):
+        mode = {"what": "Partial write </td></tr><img src=x>", "where": "src/foo_bar.py:get(value)",
+                "trigger": "![track](https://example.com/image)\nWrite fails",
+                "detected_by": "Write failure test", "covered_in_this_pr": False}
+        malformed = {**mode, "covered_in_this_pr": "false"}
+        markdown = convert_to_markdown_v2(
+            {"review": {"failure_modes": [malformed, None, mode, {**mode, "covered_in_this_pr": True}]}},
+            gfm_supported=gfm_supported,
+        )
+        assert "Failure modes" in markdown
+        assert markdown.count("Partial write") == 2
+        assert "Write failure test" in markdown
+        assert "&lt;img src=x&gt;" in markdown
+        assert "<img" not in markdown
+        assert "Covered in this PR" in markdown and "Yes" in markdown and "No" in markdown
+        if gfm_supported:
+            assert markdown.count("<tr><td>") == markdown.count("</td></tr>") == 1
+            assert "src/foo_bar.py:get(value)" in markdown
+        else:
+            assert "![track](" not in markdown
+
+    @pytest.mark.parametrize("gfm_supported", [True, False])
+    def test_failure_modes_render_empty_state_and_cap_single_response(self, gfm_supported):
+        assert "No failure modes identified." in convert_to_markdown_v2(
+            {"review": {"failure_modes": []}}, gfm_supported=gfm_supported,
+        )
+        assert "No failure modes identified." in convert_to_markdown_v2(
+            {"review": {"failure_modes": {"what": "bad"}}}, gfm_supported=gfm_supported,
+        )
+        mode = {"what": "Partial write", "where": "app.py:save", "trigger": "Write fails",
+                "detected_by": "Write failure test", "covered_in_this_pr": False}
+        markdown = convert_to_markdown_v2({"review": {"failure_modes": [mode] * 4}}, gfm_supported=gfm_supported)
+        assert markdown.count("Partial write") == 3
+
     # Tests that the function works correctly with an empty dictionary input
     def test_empty_dictionary_input(self):
         input_data = {}

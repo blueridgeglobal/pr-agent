@@ -28,7 +28,7 @@ from pr_agent.algo.inline_comment_dedup import (
     key_issue_location_fingerprint,
     strip_markers,
 )
-from pr_agent.algo.output_models import PRReview
+from pr_agent.algo.output_models import PRReview, parse_failure_modes
 from pr_agent.algo.pr_processing import (
     OUTPUT_BUFFER_TOKENS_HARD_THRESHOLD,
     OUTPUT_BUFFER_TOKENS_SOFT_THRESHOLD,
@@ -245,6 +245,7 @@ class PRReviewer:
             "require_estimate_effort_to_review": get_settings().pr_reviewer.require_estimate_effort_to_review,
             "require_risk_assessment": get_settings().pr_reviewer.get("require_risk_assessment", False),
             "require_merge_recommendation": get_settings().pr_reviewer.get("require_merge_recommendation", False),
+            "require_failure_modes": get_settings().pr_reviewer.get("require_failure_modes", False),
             "require_priority_files": get_settings().pr_reviewer.get("require_priority_files", False),
             "require_estimate_contribution_time_cost": (
                 get_settings().pr_reviewer.require_estimate_contribution_time_cost
@@ -1251,6 +1252,7 @@ class PRReviewer:
                 ("estimated_effort_to_review_[1-5]", "require_estimate_effort_to_review"),
                 ("risk_level", "require_risk_assessment"),
                 ("merge_recommendation", "require_merge_recommendation"),
+                ("failure_modes", "require_failure_modes"),
                 ("review_priority_files", "require_priority_files"),
                 ("contribution_time_cost_estimate", "require_estimate_contribution_time_cost"),
                 ("score", "require_score"),
@@ -1285,8 +1287,13 @@ class PRReviewer:
         the feedback.
         """
         data = self.prediction_data if self.prediction_data is not None else self._load_review_yaml(self.prediction)
+        if isinstance(data, dict) and isinstance(data.get("review"), dict):
+            if not getattr(self, "vars", {}).get("require_failure_modes", False):
+                data["review"].pop("failure_modes", None)
         if self.prediction_data is None:
             self._validate_review_schema(data)
+        if isinstance(data, dict) and isinstance(data.get("review"), dict) and "failure_modes" in data["review"]:
+            data["review"]["failure_modes"] = parse_failure_modes(data["review"]["failure_modes"])
         github_action_output(data, 'review')
 
         if not isinstance(data, dict) or not isinstance(data.get('review'), dict) or not data['review']:

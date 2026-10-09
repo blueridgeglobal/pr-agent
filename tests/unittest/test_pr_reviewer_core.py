@@ -300,6 +300,71 @@ def test_review_schema_requires_enabled_prompt_fields_only():
     get_logger.return_value.warning.assert_not_called()
 
 
+def test_load_review_yaml_preserves_failure_modes_during_scalar_repair():
+    prediction = """review:
+  security_concerns: Risk: unexpected input
+  key_issues_to_review: []
+  failure_modes:
+    - what: Lost update
+      where: app.py:10
+      trigger: Concurrent requests
+      detected_by: A failing test
+      covered_in_this_pr: false
+"""
+    review = PRReviewer._load_review_yaml(prediction)["review"]
+
+    assert review["security_concerns"].strip() == "Risk: unexpected input"
+    assert review["failure_modes"] == [{
+        "what": "Lost update",
+        "where": "app.py:10",
+        "trigger": "Concurrent requests",
+        "detected_by": "A failing test",
+        "covered_in_this_pr": False,
+    }]
+    assert review["failure_modes"][0]["covered_in_this_pr"] is False
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_review_schema_requires_failure_modes_only_when_enabled(enabled):
+    reviewer = _make_reviewer()
+    reviewer.vars = {"require_failure_modes": enabled}
+    assert reviewer._validate_review_schema({"review": {"key_issues_to_review": []}}) is not enabled
+    assert reviewer._validate_review_schema({"review": {"key_issues_to_review": [], "failure_modes": []}}) is True
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_failure_modes_reach_output_consumers_only_when_enabled(enabled):
+    reviewer = _make_prediction_reviewer()
+    reviewer.vars = {"require_failure_modes": enabled}
+    mode = {"what": "Partial write", "where": "app.py:save", "trigger": "Write fails",
+            "detected_by": "Write failure test", "covered_in_this_pr": False}
+    raw_modes = [{**mode, "covered_in_this_pr": "false"}, "bad", mode, mode, mode, mode]
+    reviewer.prediction = "unused prediction"
+    data = {"review": {"key_issues_to_review": [], "failure_modes": raw_modes}}
+    reviewer.git_provider.get_diff_files.return_value = []
+    reviewer.git_provider.is_supported.return_value = False
+    reviewer.set_review_labels = MagicMock()
+    with (
+        patch("pr_agent.tools.pr_reviewer.load_yaml", return_value=data),
+        patch("pr_agent.tools.pr_reviewer.github_action_output") as action_output,
+        patch("pr_agent.tools.pr_reviewer.convert_to_markdown_v2", return_value="review") as render,
+        patch("pr_agent.tools.pr_reviewer.push_outputs") as push,
+    ):
+        reviewer._prepare_pr_review()
+    assert ("failure_modes" in action_output.call_args.args[0]["review"]) is enabled
+    assert ("failure_modes" in reviewer.git_provider.publish_structured_review.call_args.args[0]["review"]) is enabled
+    assert ("failure_modes" in render.call_args.args[0]["review"]) is enabled
+    if push.called:
+        assert ("failure_modes" in push.call_args.kwargs["payload"]) is enabled
+    if enabled:
+        expected = [mode] * 3
+        assert action_output.call_args.args[0]["review"]["failure_modes"] == expected
+        assert reviewer.git_provider.publish_structured_review.call_args.args[0]["review"]["failure_modes"] == expected
+        assert render.call_args.args[0]["review"]["failure_modes"] == expected
+        if push.called:
+            assert push.call_args.kwargs["payload"]["failure_modes"] == expected
+
+
 def test_review_schema_allows_fields_requested_through_extra_instructions():
     reviewer = _make_prediction_reviewer()
     with patch("pr_agent.tools.pr_reviewer.get_logger") as get_logger:

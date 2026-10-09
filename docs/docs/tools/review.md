@@ -189,6 +189,12 @@ for the authoritative default values.
     <td>If set to true, the tool will add a section describing what the review found: no_concerns_found (no important blockers or risks identified), needs_review (seems acceptable but deserves focused reviewer attention) or changes_required (clear issues to fix before merge). The value reports the model's findings, not a guarantee about the code.</td>
   </tr>
   <tr>
+    <td><b>require_failure_modes</b></td>
+    <td>Off by default. If enabled, adds up to three concrete failure scenarios, each with what could break,
+    where, its trigger, how it could be detected, and whether a test or check in this PR covers it.
+    These scenarios guide human review; they do not gate merging or prove that the PR is safe.</td>
+  </tr>
+  <tr>
     <td><b>require_priority_files</b></td>
     <td>If set to true, the tool will add a section listing the files a human reviewer should inspect first.</td>
   </tr>
@@ -246,8 +252,8 @@ Edit this field to enable/disable the tool, or to change the configurations used
 
 The `review` tool can automatically add labels to your Pull Requests:
 
-- **`possible security issue`**: This label is applied if the tool detects a potential [security vulnerability](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/pr_reviewer_prompts.toml#L134) in the PR's code. This feedback is controlled by the 'enable_review_labels_security' flag (default is true).
-- **`review effort [x/5]`**: This label estimates the [effort](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/pr_reviewer_prompts.toml#L118) required to review the PR on a relative scale of 1 to 5, where 'x' represents the assessed effort. This feedback is controlled by the 'enable_review_labels_effort' flag (default is true).
+- **`possible security issue`**: This label is applied if the tool detects a potential [security vulnerability](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/pr_reviewer_prompts.toml#L147) in the PR's code. This feedback is controlled by the 'enable_review_labels_security' flag (default is true).
+- **`review effort [x/5]`**: This label estimates the [effort](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/pr_reviewer_prompts.toml#L119) required to review the PR on a relative scale of 1 to 5, where 'x' represents the assessed effort. This feedback is controlled by the 'enable_review_labels_effort' flag (default is true).
 
 Ticket compliance is reported in the review comment, not as a PR label. It is controlled by
 `pr_reviewer.require_ticket_analysis_review` and requires available ticket context. The tool does not add
@@ -335,6 +341,7 @@ merged field by field:
 | `relevant_tests` | Yes if any chunk found tests |
 | `score` | The lowest score any chunk gave |
 | `risk_level`, `merge_recommendation` | The most conservative value any chunk gave |
+| `failure_modes` | Concatenate valid cases in chunk order, keeping at most three |
 | `estimated_effort_to_review_[1-5]` | The highest value any chunk gave |
 | `contribution_time_cost_estimate` | The sum over the chunks, per case |
 | `ticket_compliance_check` | One entry per ticket, with its bullet lists unioned across chunks |
