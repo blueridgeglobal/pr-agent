@@ -126,7 +126,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  TRIVY_SKIP_DIRS: '**/node_modules,**/vendor,**/bin,**/obj,**/target,**/.terraform,**/.venv,**/venv,**/dist,**/.teamcity'
+  TRIVY_SKIP_DIRS: '**/node_modules,**/vendor,**/bin,**/obj,**/target,**/.terraform,**/.venv,**/venv,**/dist'
+  TRIVY_SKIP_FILES: '**/.teamcity/pom.xml'
   TRIVY_TIMEOUT: '15m'
   TRIVY_SKIP_VERSION_CHECK: 'true'
 
