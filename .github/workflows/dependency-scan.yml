@@ -1,0 +1,263 @@
+name: Dependency Security Scan
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/yarn.lock'
+      - '**/pnpm-lock.yaml'
+      - '**/bun.lock*'
+      - '**/requirements*.txt'
+      - '**/requirements*.in'
+      - '**/pyproject.toml'
+      - '**/setup.py'
+      - '**/setup.cfg'
+      - '**/Pipfile*'
+      - '**/uv.lock'
+      - '**/poetry.lock'
+      - '**/environment.y*ml'
+      - '**/pom.xml'
+      - '**/*.gradle'
+      - '**/*.gradle.kts'
+      - '**/gradle.lockfile'
+      - '**/*.csproj'
+      - '**/*.vbproj'
+      - '**/*.fsproj'
+      - '**/packages.config'
+      - '**/packages.lock.json'
+      - '**/Directory.Packages.props'
+      - '**/global.json'
+      - '**/go.mod'
+      - '**/go.sum'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '**/composer.json'
+      - '**/composer.lock'
+      - '**/Gemfile*'
+      - '**/Dockerfile*'
+      - '**/*.dockerfile'
+      - '**/*compose*.y*ml'
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - '**/Chart.yaml'
+      - '**/values*.yaml'
+      - '.trivyignore'
+      - '.github/workflows/dependency-scan.yml'
+  pull_request:
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - '**/yarn.lock'
+      - '**/pnpm-lock.yaml'
+      - '**/bun.lock*'
+      - '**/requirements*.txt'
+      - '**/requirements*.in'
+      - '**/pyproject.toml'
+      - '**/setup.py'
+      - '**/setup.cfg'
+      - '**/Pipfile*'
+      - '**/uv.lock'
+      - '**/poetry.lock'
+      - '**/environment.y*ml'
+      - '**/pom.xml'
+      - '**/*.gradle'
+      - '**/*.gradle.kts'
+      - '**/gradle.lockfile'
+      - '**/*.csproj'
+      - '**/*.vbproj'
+      - '**/*.fsproj'
+      - '**/packages.config'
+      - '**/packages.lock.json'
+      - '**/Directory.Packages.props'
+      - '**/global.json'
+      - '**/go.mod'
+      - '**/go.sum'
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+      - '**/composer.json'
+      - '**/composer.lock'
+      - '**/Gemfile*'
+      - '**/Dockerfile*'
+      - '**/*.dockerfile'
+      - '**/*compose*.y*ml'
+      - '**/*.tf'
+      - '**/*.tfvars'
+      - '**/Chart.yaml'
+      - '**/values*.yaml'
+      - '.trivyignore'
+      - '.github/workflows/dependency-scan.yml'
+  schedule:
+    # Mondays 00:30 UTC (06:00 IST), alongside the weekly Dependabot run
+    - cron: '30 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      scanners:
+        description: 'What to scan'
+        type: choice
+        options:
+          - vuln,misconfig,secret
+          - vuln
+          - misconfig
+          - secret
+          - vuln,misconfig
+        default: vuln,misconfig,secret
+      severity:
+        description: 'Minimum severity shown in the report'
+        type: choice
+        options:
+          - CRITICAL
+          - HIGH
+          - MEDIUM
+          - LOW
+        default: HIGH
+      fail_on_findings:
+        description: 'Fail the run if findings at the selected severity are found'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRIVY_SKIP_DIRS: '**/node_modules,**/vendor,**/bin,**/obj,**/target,**/.terraform,**/.venv,**/venv,**/dist'
+  TRIVY_SKIP_FILES: '**/.teamcity/pom.xml'
+  TRIVY_TIMEOUT: '15m'
+  TRIVY_SKIP_VERSION_CHECK: 'true'
+
+jobs:
+  scan:
+    name: Trivy Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve Scan Settings
+        id: settings
+        env:
+          INPUT_SCANNERS: ${{ inputs.scanners }}
+          INPUT_SEVERITY: ${{ inputs.severity }}
+          INPUT_FAIL: ${{ inputs.fail_on_findings }}
+        run: |
+          case "${INPUT_SEVERITY:-HIGH}" in
+            CRITICAL) SEVERITY="CRITICAL" ;;
+            HIGH)     SEVERITY="CRITICAL,HIGH" ;;
+            MEDIUM)   SEVERITY="CRITICAL,HIGH,MEDIUM" ;;
+            *)        SEVERITY="CRITICAL,HIGH,MEDIUM,LOW" ;;
+          esac
+          {
+            echo "scanners=${INPUT_SCANNERS:-vuln,misconfig,secret}"
+            echo "severity=$SEVERITY"
+            if [ "$INPUT_FAIL" == "true" ]; then echo "exit_code=1"; else echo "exit_code=0"; fi
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Add Custom Secret Rules
+        run: |
+          if [ ! -f trivy-secret.yaml ]; then
+            cat > trivy-secret.yaml <<'RULES'
+          rules:
+            - id: sonarqube-token
+              category: SonarQube
+              title: SonarQube Token
+              severity: CRITICAL
+              regex: '\bsq[pua]_[0-9a-f]{40}\b'
+              keywords:
+                - sqp_
+                - squ_
+                - sqa_
+          RULES
+          fi
+
+      - name: Run Trivy (full JSON results)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: ${{ steps.settings.outputs.scanners }}
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: json
+          output: trivy-results.json
+          exit-code: '0'
+          hide-progress: true
+
+      - name: Run Trivy (report)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: ${{ steps.settings.outputs.scanners }}
+          severity: ${{ steps.settings.outputs.severity }}
+          format: table
+          output: trivy-report.txt
+          exit-code: ${{ steps.settings.outputs.exit_code }}
+          hide-progress: true
+
+      - name: Publish Scan Summary
+        if: always()
+        env:
+          SCANNERS: ${{ steps.settings.outputs.scanners }}
+          SEVERITY: ${{ steps.settings.outputs.severity }}
+        run: |
+          {
+            echo "## Dependency Security Scan"
+            echo ""
+            echo "- Branch: \`${GITHUB_REF_NAME}\` · Trigger: \`${GITHUB_EVENT_NAME}\`"
+            echo "- Scanners: \`${SCANNERS}\` · Report severity: \`${SEVERITY}\`"
+            echo ""
+            TARGETS=0
+            FINDINGS=0
+            if [ -s trivy-results.json ]; then
+              TARGETS=$(jq '[.Results[]?.Target] | unique | length' trivy-results.json)
+              FINDINGS=$(jq '[.Results[]? | ((.Vulnerabilities // [])[]), ((.Misconfigurations // [])[] | select(.Status == "FAIL")), ((.Secrets // [])[])] | length' trivy-results.json)
+            fi
+            if [ "$TARGETS" == "0" ]; then
+              echo "Nothing scannable was found (no lockfiles or pinned manifests, IaC or secrets)."
+            elif [ "$FINDINGS" == "0" ]; then
+              echo "No findings across ${TARGETS} scanned target(s)."
+            else
+              echo "| Finding type | Critical | High | Medium | Low | Unknown |"
+              echo "|---|---|---|---|---|---|"
+              jq -r '
+                [ .Results[]? |
+                  ((.Vulnerabilities // [])[] | {t: "Vulnerabilities", s: .Severity}),
+                  ((.Misconfigurations // [])[] | select(.Status == "FAIL") | {t: "Misconfigurations", s: .Severity}),
+                  ((.Secrets // [])[] | {t: "Secrets", s: .Severity}) ]
+                | group_by(.t)[]
+                | . as $g
+                | "| \($g[0].t) | \([$g[] | select(.s == "CRITICAL")] | length) | \([$g[] | select(.s == "HIGH")] | length) | \([$g[] | select(.s == "MEDIUM")] | length) | \([$g[] | select(.s == "LOW")] | length) | \([$g[] | select(.s == "UNKNOWN")] | length) |"
+              ' trivy-results.json
+              echo ""
+              echo "Targets scanned: ${TARGETS}"
+              if [ -s trivy-report.txt ]; then
+                echo ""
+                echo "<details><summary>Findings at report severity</summary>"
+                echo ""
+                echo '```'
+                head -c 900000 trivy-report.txt
+                echo '```'
+                echo "</details>"
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Scan Reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-scan-${{ github.run_id }}
+          path: |
+            trivy-results.json
+            trivy-report.txt
+          retention-days: 30
+          if-no-files-found: ignore
